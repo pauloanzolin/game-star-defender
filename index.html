@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>★ Star Defender — Micro Arcade ★</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #05060f;
+    color: #e8e8ff;
+    font-family: "Courier New", monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+  }
+  h1 {
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+    color: #6cf;
+    text-shadow: 0 0 10px #06a;
+  }
+  #wrap { position: relative; }
+  canvas {
+    display: block;
+    background: radial-gradient(circle at 50% 30%, #0d1030 0%, #05060f 70%);
+    border: 2px solid #224;
+    border-radius: 8px;
+    box-shadow: 0 0 30px #0066aa55, inset 0 0 40px #00112255;
+  }
+  #hud {
+    position: absolute;
+    top: 8px; left: 12px; right: 12px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    pointer-events: none;
+    text-shadow: 0 0 6px #000;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #05060fcc;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 { font-size: 28px; color: #ffcc44; text-shadow: 0 0 12px #a60; margin-bottom: 8px; }
+  #overlay p { font-size: 13px; line-height: 1.7; color: #aab; margin-bottom: 16px; }
+  #overlay .key { color: #6cf; }
+  #overlay .pw { display:inline-block; min-width: 14px; font-weight: bold; }
+  button {
+    font-family: inherit;
+    font-size: 15px;
+    letter-spacing: 2px;
+    padding: 10px 26px;
+    background: #1a3a6a;
+    color: #cfe;
+    border: 1px solid #4af;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: .15s;
+  }
+  button:hover { background: #2a5aaa; box-shadow: 0 0 14px #4af; }
+  .hint { margin-top: 16px; font-size: 11px; color: #557; letter-spacing: 1px; }
+  #errbar {
+    display: none;
+    max-width: 420px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #3a0d0d;
+    border: 1px solid #f55;
+    border-radius: 6px;
+    color: #fbb;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+  <h1>★ STAR DEFENDER ★</h1>
+  <div id="wrap">
+    <canvas id="game" width="420" height="560"></canvas>
+    <div id="hud">
+      <span>PONTOS: <b id="score">0</b></span>
+      <span>N&Iacute;VEL: <b id="level">1</b></span>
+      <span>VIDAS: <b id="lives">3</b></span>
+    </div>
+    <div id="overlay">
+      <h2>STAR DEFENDER</h2>
+      <p>
+        <span class="key">&larr; &uarr; &darr; &rarr;</span> / <span class="key">WASD</span> mover &middot;
+        <span class="key">ESPA&Ccedil;O</span> atirar &middot;
+        <span class="key">P</span> pausar<br>
+        O cen&aacute;rio corre sempre para frente e acelera!<br>
+        <b>2 batidas = explode e perde 1 vida.</b><br>
+        Tijolos <span class="pw" style="color:#c96">&#9646;</span> &mdash; desvie ou destrua a tiros.<br>
+        Meteoros <span class="pw" style="color:#988">&#9679;</span> indestrut&iacute;veis &mdash; <b>s&oacute; d&aacute; pra desviar!</b><br>
+        Pegue os power-ups (30s):<br>
+        <span class="pw" style="color:#4df">&#9679;</span> Escudo &nbsp;
+        <span class="pw" style="color:#fc4">&#9679;</span> For&ccedil;a (tiro perfurante) &nbsp;
+        <span class="pw" style="color:#6f6">&#9679;</span> Tiro triplo
+      </p>
+      <button id="startBtn" type="button">INICIAR</button>
+    </div>
+  </div>
+  <div class="hint">recorde: <b id="best">0</b> &middot; feito para teste r&aacute;pido</div>
+  <pre id="errbar"></pre>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Star Defender — micro arcade (arquivo único, sem dependências)
+ *   - dificuldade crescente por tempo
+ *   - obstáculos fixos quebráveis
+ *   - power-ups temporários (30s): escudo, força, tiro triplo
+ * Diagnóstico: qualquer exceção é exibida no banner #errbar.
+ * ------------------------------------------------------------------ */
+
+(function installErrorReporter() {
+  function show(msg) {
+    var bar = document.getElementById("errbar");
+    if (!bar) { return; }
+    bar.style.display = "block";
+    bar.textContent = "⚠ Erro: " + msg;
+  }
+  window.addEventListener("error", function (e) {
+    show((e.message || "desconhecido") + (e.filename ? " @" + e.lineno : ""));
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    show("promessa rejeitada: " + (e.reason && e.reason.message || e.reason));
+  });
+})();
+
+document.addEventListener("DOMContentLoaded", function () {
+  // ---- Configuração centralizada -------------------------------------
+  var CONFIG = {
+    SHIP_SPEED: 5,
+    BULLET_SPEED: 8,
+    SHOOT_COOLDOWN: 220,        // ms
+    START_LIVES: 3,
+    STAR_COUNT: 60,
+    SCORE_PER_KILL: 10,
+    SCORE_PER_BRICK: 5,
+    BASE_SPAWN_MS: 950,
+    MIN_SPAWN_MS: 260,
+    OBSTACLE_HITS: 5,           // resistência base (mais difícil de quebrar)
+    OBSTACLE_SPAWN_MS: 2600,    // surge um tijolo a cada ~2,6s (corrente contínua)
+    OBSTACLE_MAX: 14,           // teto de segurança
+    METEOR_SPAWN_MS: 4200,      // meteoro (indestrutível) a cada ~4,2s
+    METEOR_FALL_MIN: 2.4,
+    METEOR_FALL_MAX: 4.2,
+    SHIP_RANGE_TOP: 0.12,       // até onde a nave pode subir (fração da altura)
+    POWERUP_DURATION: 30000,    // 30s de buff
+    POWERUP_SPAWN_MS: 9000,
+    POWERUP_FALL: 2,
+    SEC_PER_LEVEL: 15000,       // sobe de nível a cada 15s
+    SCROLL_BASE: 2.4,           // velocidade contínua do cenário (cresce c/ dificuldade)
+    HITS_TO_EXPLODE: 2,         // 2 batidas -> explode e perde 1 vida
+    INVULN_AFTER_HIT: 900,      // i-frames após uma batida (ms)
+    INVULN_AFTER_LIFE: 1700,    // i-frames após explodir/perder vida (ms)
+    STORAGE_KEY: "stardefender_best"
+  };
+
+  var STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
+  var PW = { SHIELD: "shield", POWER: "power", TRIPLE: "triple" };
+
+  // ---- DOM ------------------------------------------------------------
+  var cv = document.getElementById("game");
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height;
+
+  var dom = {
+    score: document.getElementById("score"),
+    level: document.getElementById("level"),
+    lives: document.getElementById("lives"),
+    best: document.getElementById("best"),
+    overlay: document.getElementById("overlay"),
+    startBtn: document.getElementById("startBtn"),
+    title: document.querySelector("#overlay h2"),
+    desc: document.querySelector("#overlay p")
+  };
+
+  // ---- Persistência segura -------------------------------------------
+  var storage = {
+    load: function () {
+      try { return Number(localStorage.getItem(CONFIG.STORAGE_KEY)) || 0; }
+      catch (e) { return 0; }
+    },
+    save: function (v) {
+      try { localStorage.setItem(CONFIG.STORAGE_KEY, String(v)); } catch (e) {}
+    }
+  };
+
+  // ---- Teclado --------------------------------------------------------
+  var keys = Object.create(null);
+  function bindKeys() {
+    var tracked = ["arrowleft", "arrowright", "arrowup", "arrowdown",
+                   "a", "d", "w", "s", " "];
+    window.addEventListener("keydown", function (e) {
+      var k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "arrowright" || k === " " ||
+          k === "arrowup" || k === "arrowdown") { e.preventDefault(); }
+      if (tracked.indexOf(k) !== -1) { keys[k] = true; }
+      if (k === "p") { togglePause(); }
+    });
+    window.addEventListener("keyup", function (e) { keys[e.key.toLowerCase()] = false; });
+  }
+
+  // ---- Estado ---------------------------------------------------------
+  var game = {
+    state: STATE.MENU,
+    ship: null,
+    bullets: [],
+    enemies: [],
+    particles: [],
+    obstacles: [],
+    powerups: [],
+    meteors: [],
+    stars: [],
+    buffs: {},                 // type -> ms restantes
+    score: 0,
+    lives: 0,
+    best: storage.load(),
+    elapsed: 0,                // ms de jogo (para dificuldade por tempo)
+    level: 1,
+    diff: 0,
+    spawnTimer: 0,
+    shootCooldown: 0,
+    powerupTimer: 0,
+    obstacleTimer: 0,
+    meteorTimer: 0
+  };
+
+  dom.best.textContent = game.best;
+
+  // ---- Helpers --------------------------------------------------------
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function notDead(o) { return !o.dead; }
+
+  function updateHUD() {
+    dom.score.textContent = game.score;
+    dom.lives.textContent = game.lives;
+    dom.level.textContent = game.level;
+    dom.best.textContent = game.best;
+  }
+
+  function makeStars() {
+    var arr = [];
+    for (var i = 0; i < CONFIG.STAR_COUNT; i++) {
+      arr.push({ x: rand(0, W), y: rand(0, H), s: rand(0.3, 1.8), sp: rand(0.2, 0.8) });
+    }
+    return arr;
+  }
+
+  // Surge UM tijolo no TOPO (à frente) e desce com o scroll, "ficando para trás".
+  // Pode ser desviado ou destruído a tiros. Resistência escala com a dificuldade.
+  function spawnObstacle() {
+    var ow = 48, oh = 26;
+    var attempts = 0;
+
+    while (attempts < 30) {
+      attempts++;
+      var x = rand(ow / 2 + 4, W - ow / 2 - 4);
+
+      // evita nascer em cima de outro tijolo que ainda está entrando pelo topo
+      var collides = false;
+      for (var k = 0; k < game.obstacles.length; k++) {
+        var o = game.obstacles[k];
+        if (o.y < 60 && Math.abs(x - o.x) < (ow + o.w) / 2 + 10) { collides = true; break; }
+      }
+      if (collides) { continue; }
+
+      var hp = CONFIG.OBSTACLE_HITS + Math.floor(game.diff); // mais duro com o tempo
+      game.obstacles.push({ x: x, y: -oh, w: ow, h: oh,
+                            hp: hp, maxhp: hp, dead: false });
+      return;
+    }
+  }
+
+  // ---- Ciclo ----------------------------------------------------------
+  function startGame() {
+    game.ship = { x: W / 2, y: H - 60, w: 28, h: 22, hits: 0, invuln: 0 };
+    game.bullets = [];
+    game.enemies = [];
+    game.particles = [];
+    game.powerups = [];
+    game.obstacles = [];
+    game.meteors = [];
+    game.stars = makeStars();
+    game.buffs = {};
+    game.score = 0;
+    game.lives = CONFIG.START_LIVES;
+    game.elapsed = 0;
+    game.level = 1;
+    game.diff = 0;
+    game.spawnTimer = 0;
+    game.shootCooldown = 0;
+    game.powerupTimer = CONFIG.POWERUP_SPAWN_MS;
+    game.obstacleTimer = 3000;   // primeiro tijolo após ~3s
+    game.meteorTimer = 5000;     // primeiro meteoro após ~5s
+    game.state = STATE.PLAYING;
+    updateHUD();
+    dom.overlay.classList.add("hidden");
+  }
+
+  function togglePause() {
+    if (game.state === STATE.PLAYING) { game.state = STATE.PAUSED; }
+    else if (game.state === STATE.PAUSED) { game.state = STATE.PLAYING; }
+  }
+
+  function gameOver() {
+    game.state = STATE.GAMEOVER;
+    if (game.score > game.best) { game.best = game.score; storage.save(game.best); }
+    updateHUD();
+    dom.title.textContent = "FIM DE JOGO";
+    dom.desc.innerHTML =
+      'Pontua&ccedil;&atilde;o: <span class="key">' + game.score + '</span> &middot; ' +
+      'N&iacute;vel: <span class="key">' + game.level + '</span><br>' +
+      'Recorde: <span class="key">' + game.best + '</span>';
+    dom.startBtn.textContent = "JOGAR DE NOVO";
+    dom.overlay.classList.remove("hidden");
+  }
+
+  function spawnEnemy() {
+    var size = rand(22, 36);
+    game.enemies.push({
+      x: rand(size / 2, W - size / 2),
+      y: -size,
+      r: size / 2,
+      sp: rand(1.1, 2.4) + game.diff * 0.45,
+      hue: rand(340, 380),
+      wob: rand(0, Math.PI * 2),
+      dead: false
+    });
+  }
+
+  function spawnPowerup() {
+    var types = [PW.SHIELD, PW.POWER, PW.TRIPLE];
+    var t = types[Math.floor(rand(0, types.length))];
+    game.powerups.push({ x: rand(30, W - 30), y: -16, r: 12, type: t, dead: false });
+  }
+
+  // Meteoros: indestrutíveis (balas não os afetam), só dá pra desviar.
+  function spawnMeteor() {
+    var r = rand(14, 26);
+    game.meteors.push({
+      x: rand(r, W - r),
+      y: -r,
+      r: r,
+      sp: rand(CONFIG.METEOR_FALL_MIN, CONFIG.METEOR_FALL_MAX) + game.diff * 0.4,
+      drift: rand(-0.5, 0.5),
+      rot: rand(0, Math.PI * 2),
+      vr: rand(-0.05, 0.05),
+      dead: false
+    });
+  }
+
+  function buffColor(type) {
+    if (type === PW.SHIELD) { return "#4df"; }
+    if (type === PW.POWER) { return "#fc4"; }
+    return "#6f6"; // triple
+  }
+  function buffSymbol(type) {
+    if (type === PW.SHIELD) { return "⛨"; } // escudo
+    if (type === PW.POWER) { return "⚡"; }  // raio
+    return "≡";                              // três linhas
+  }
+
+  function boom(x, y, hue, n) {
+    n = n || 14;
+    for (var i = 0; i < n; i++) {
+      var a = rand(0, Math.PI * 2), sp = rand(1, 4);
+      game.particles.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, hue: hue });
+    }
+  }
+
+  function fire() {
+    var power = (game.buffs[PW.POWER] || 0) > 0;
+    var triple = (game.buffs[PW.TRIPLE] || 0) > 0;
+    var sh = game.ship;
+    function shoot(vx) {
+      game.bullets.push({
+        x: sh.x, y: sh.y - 14, vx: vx, vy: -CONFIG.BULLET_SPEED,
+        pierce: power, big: power, dead: false
+      });
+    }
+    if (triple) { shoot(-2.6); shoot(0); shoot(2.6); }
+    else { shoot(0); }
+    game.shootCooldown = power ? CONFIG.SHOOT_COOLDOWN * 0.6 : CONFIG.SHOOT_COOLDOWN;
+  }
+
+  // Sistema de dano: cada batida conta; ao atingir HITS_TO_EXPLODE, explode e -1 vida.
+  // Escudo e i-frames (invuln) anulam o dano.
+  function damageShip() {
+    var sh = game.ship;
+    if (sh.invuln > 0) { return; }
+    if ((game.buffs[PW.SHIELD] || 0) > 0) { return; }
+    sh.hits++;
+    sh.invuln = CONFIG.INVULN_AFTER_HIT;
+    boom(sh.x, sh.y, 30, 16);
+    if (sh.hits >= CONFIG.HITS_TO_EXPLODE) {
+      sh.hits = 0;
+      explodeShip();
+    }
+  }
+
+  function explodeShip() {
+    var sh = game.ship;
+    boom(sh.x, sh.y, 200, 44);
+    boom(sh.x, sh.y, 40, 24);
+    game.lives--;
+    updateHUD();
+    sh.invuln = CONFIG.INVULN_AFTER_LIFE;
+    sh.x = W / 2;
+    sh.y = H - 60;
+    if (game.lives <= 0) { gameOver(); }
+  }
+
+  // ---- Update (f = fator de delta-time, 1.0 == 60fps) ----------------
+  function update(dt, f) {
+    var i, j, e, b, p, s, o, pu;
+
+    // estrelas animam sempre; durante o jogo correm mais rápido (cenário em movimento)
+    var starBoost = (game.state === STATE.PLAYING)
+      ? (CONFIG.SCROLL_BASE + game.diff * 0.5) * 0.8 : 0;
+    for (i = 0; i < game.stars.length; i++) {
+      s = game.stars[i];
+      s.y += (s.sp + starBoost * s.s) * f;
+      if (s.y > H) { s.y = 0; s.x = rand(0, W); }
+    }
+
+    if (game.state !== STATE.PLAYING) { return; }
+
+    // dificuldade por TEMPO (+ um empurrão por pontuação)
+    game.elapsed += dt;
+    game.diff = game.elapsed / CONFIG.SEC_PER_LEVEL + game.score / 800;
+    var lvl = 1 + Math.floor(game.elapsed / CONFIG.SEC_PER_LEVEL);
+    if (lvl !== game.level) { game.level = lvl; updateHUD(); }
+
+    // buffs: contagem regressiva
+    for (var key in game.buffs) {
+      if (game.buffs[key] > 0) { game.buffs[key] = Math.max(0, game.buffs[key] - dt); }
+    }
+    var shielded = (game.buffs[PW.SHIELD] || 0) > 0;
+
+    // velocidade contínua do cenário (sempre para frente, cresce com a dificuldade)
+    var scroll = CONFIG.SCROLL_BASE + game.diff * 0.5;
+
+    // nave: movimento LIVRE nos 4 sentidos (setas + WASD), sem ser bloqueada
+    var sh = game.ship;
+    if (sh.invuln > 0) { sh.invuln = Math.max(0, sh.invuln - dt); }
+    var yTop = H * CONFIG.SHIP_RANGE_TOP, yBot = H - sh.h / 2 - 6;
+    if (keys["arrowleft"] || keys["a"]) { sh.x -= CONFIG.SHIP_SPEED * f; }
+    if (keys["arrowright"] || keys["d"]) { sh.x += CONFIG.SHIP_SPEED * f; }
+    if (keys["arrowup"] || keys["w"]) { sh.y -= CONFIG.SHIP_SPEED * f; }
+    if (keys["arrowdown"] || keys["s"]) { sh.y += CONFIG.SHIP_SPEED * f; }
+    sh.x = Math.max(sh.w / 2, Math.min(W - sh.w / 2, sh.x));
+    sh.y = Math.max(yTop, Math.min(yBot, sh.y));
+
+    // tiro
+    game.shootCooldown -= dt;
+    if (keys[" "] && game.shootCooldown <= 0) { fire(); }
+
+    // bullets movem
+    for (i = 0; i < game.bullets.length; i++) {
+      b = game.bullets[i];
+      b.x += b.vx * f;
+      b.y += b.vy * f;
+      if (b.y < -12 || b.x < -12 || b.x > W + 12) { b.dead = true; }
+    }
+
+    // spawn inimigos (intervalo cai com a dificuldade)
+    game.spawnTimer -= dt;
+    if (game.spawnTimer <= 0) {
+      spawnEnemy();
+      game.spawnTimer = Math.max(CONFIG.MIN_SPAWN_MS, CONFIG.BASE_SPAWN_MS - game.diff * 110);
+    }
+
+    // spawn power-ups
+    game.powerupTimer -= dt;
+    if (game.powerupTimer <= 0) {
+      spawnPowerup();
+      game.powerupTimer = CONFIG.POWERUP_SPAWN_MS;
+    }
+
+    // spawn de obstáculos: corrente contínua, mais frequente com a dificuldade
+    game.obstacleTimer -= dt;
+    if (game.obstacleTimer <= 0) {
+      if (game.obstacles.length < CONFIG.OBSTACLE_MAX) { spawnObstacle(); }
+      game.obstacleTimer = Math.max(900, CONFIG.OBSTACLE_SPAWN_MS - game.diff * 160);
+    }
+
+    // mover tijolos: descem com o scroll ("ficam para trás") e saem por baixo
+    for (i = 0; i < game.obstacles.length; i++) {
+      o = game.obstacles[i];
+      o.y += scroll * f;
+      if (o.y - o.h / 2 > H) { o.dead = true; }
+    }
+
+    // spawn de meteoros (cai um a um, fica mais frequente com a dificuldade)
+    game.meteorTimer -= dt;
+    if (game.meteorTimer <= 0) {
+      spawnMeteor();
+      game.meteorTimer = Math.max(1400, CONFIG.METEOR_SPAWN_MS - game.diff * 130);
+    }
+
+    // mover meteoros (indestrutíveis) — somam o scroll do cenário
+    for (i = 0; i < game.meteors.length; i++) {
+      var m = game.meteors[i];
+      m.y += (m.sp + scroll) * f;
+      m.x += m.drift * f;
+      m.rot += m.vr * f;
+      if (m.y - m.r > H) { m.dead = true; }
+    }
+
+    // mover inimigos — somam o scroll do cenário
+    for (i = 0; i < game.enemies.length; i++) {
+      e = game.enemies[i];
+      e.y += (e.sp + scroll) * f;
+      e.wob += 0.05 * f;
+      e.x += Math.sin(e.wob) * 0.6 * f;
+      if (e.y - e.r > H) { e.dead = true; } // passou: sem penalidade (só some)
+    }
+
+    // mover power-ups — somam o scroll do cenário
+    for (i = 0; i < game.powerups.length; i++) {
+      pu = game.powerups[i];
+      pu.y += (CONFIG.POWERUP_FALL + scroll) * f;
+      if (pu.y - pu.r > H) { pu.dead = true; }
+    }
+
+    // bala x inimigo  (pierce atravessa)
+    for (i = 0; i < game.enemies.length; i++) {
+      e = game.enemies[i];
+      for (j = 0; j < game.bullets.length; j++) {
+        b = game.bullets[j];
+        if (b.dead || e.dead) { continue; }
+        var rb = b.big ? 6 : 3;
+        var ex = e.x - b.x, ey = e.y - b.y;
+        if (ex * ex + ey * ey < (e.r + rb) * (e.r + rb)) {
+          e.dead = true;
+          game.score += CONFIG.SCORE_PER_KILL;
+          boom(e.x, e.y, e.hue);
+          if (!b.pierce) { b.dead = true; }
+          updateHUD();
+        }
+      }
+    }
+
+    // bala x obstáculo (tijolo)
+    for (i = 0; i < game.obstacles.length; i++) {
+      o = game.obstacles[i];
+      for (j = 0; j < game.bullets.length; j++) {
+        b = game.bullets[j];
+        if (b.dead) { continue; }
+        if (b.x > o.x - o.w / 2 && b.x < o.x + o.w / 2 &&
+            b.y > o.y - o.h / 2 && b.y < o.y + o.h / 2) {
+          o.hp--;
+          boom(b.x, b.y, 35, 5);
+          if (o.hp <= 0) { o.dead = true; game.score += CONFIG.SCORE_PER_BRICK; updateHUD(); }
+          if (!b.pierce) { b.dead = true; }
+        }
+      }
+    }
+
+    // nave x tijolo (bater causa dano; o tijolo se espatifa no impacto)
+    for (i = 0; i < game.obstacles.length; i++) {
+      o = game.obstacles[i];
+      if (o.dead) { continue; }
+      if (sh.x + sh.w / 2 > o.x - o.w / 2 && sh.x - sh.w / 2 < o.x + o.w / 2 &&
+          sh.y + sh.h / 2 > o.y - o.h / 2 && sh.y - sh.h / 2 < o.y + o.h / 2) {
+        if (!shielded && sh.invuln <= 0) { o.dead = true; boom(sh.x, sh.y, 35, 14); damageShip(); }
+        else if (shielded) { o.dead = true; boom(o.x, o.y, 200, 14); }
+      }
+      if (game.state !== STATE.PLAYING) { break; }
+    }
+
+    // nave x power-up
+    for (i = 0; i < game.powerups.length; i++) {
+      pu = game.powerups[i];
+      if (pu.dead) { continue; }
+      var px = pu.x - game.ship.x, py = pu.y - game.ship.y;
+      if (Math.abs(px) < pu.r + game.ship.w / 2 && Math.abs(py) < pu.r + game.ship.h / 2) {
+        pu.dead = true;
+        game.buffs[pu.type] = CONFIG.POWERUP_DURATION; // renova para 30s
+        boom(pu.x, pu.y, pu.type === PW.SHIELD ? 200 : (pu.type === PW.POWER ? 45 : 130), 16);
+      }
+    }
+
+    // inimigo x nave (bater causa dano; passar não penaliza)
+    for (i = 0; i < game.enemies.length; i++) {
+      e = game.enemies[i];
+      if (e.dead) { continue; }
+      var dx = Math.abs(e.x - game.ship.x), dy = Math.abs(e.y - game.ship.y);
+      if (dx < e.r + game.ship.w / 2 && dy < e.r + game.ship.h / 2) {
+        e.dead = true;
+        if (shielded) { boom(e.x, e.y, 200, 18); game.score += CONFIG.SCORE_PER_KILL; updateHUD(); }
+        else if (sh.invuln <= 0) { boom(e.x, e.y, 35, 14); damageShip(); }
+      }
+      if (game.state !== STATE.PLAYING) { break; }
+    }
+
+    // meteoro x nave (indestrutível: só some ao atingir a nave)
+    for (i = 0; i < game.meteors.length; i++) {
+      var mm = game.meteors[i];
+      if (mm.dead) { continue; }
+      var mdx = Math.abs(mm.x - game.ship.x), mdy = Math.abs(mm.y - game.ship.y);
+      if (mdx < mm.r + game.ship.w / 2 - 2 && mdy < mm.r + game.ship.h / 2 - 2) {
+        if (shielded) { mm.dead = true; boom(mm.x, mm.y, 200, 20); }
+        else if (sh.invuln <= 0) { mm.dead = true; boom(mm.x, mm.y, 35, 18); damageShip(); }
+      }
+      if (game.state !== STATE.PLAYING) { break; }
+    }
+
+    // limpeza
+    game.enemies = game.enemies.filter(notDead);
+    game.bullets = game.bullets.filter(notDead);
+    game.powerups = game.powerups.filter(notDead);
+    game.obstacles = game.obstacles.filter(notDead);
+    game.meteors = game.meteors.filter(notDead);
+
+    // partículas
+    for (i = 0; i < game.particles.length; i++) {
+      p = game.particles[i];
+      p.x += p.vx * f; p.y += p.vy * f; p.vy += 0.04 * f; p.life -= 0.02 * f;
+    }
+    game.particles = game.particles.filter(function (q) { return q.life > 0; });
+  }
+
+  // ---- Render ---------------------------------------------------------
+  function drawShip() {
+    var sh = game.ship;
+    // pisca durante a invulnerabilidade (após batida/explosão)
+    if (sh.invuln > 0 && Math.floor(game.elapsed / 90) % 2 === 0) { return; }
+    var damaged = sh.hits >= 1;                 // 1 batida = avariada (vermelho)
+    ctx.save();
+    ctx.translate(sh.x, sh.y);
+    ctx.fillStyle = damaged ? "#f66" : "#6cf";
+    ctx.shadowColor = damaged ? "#f33" : "#4af";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(0, -sh.h / 2);
+    ctx.lineTo(sh.w / 2, sh.h / 2);
+    ctx.lineTo(0, sh.h / 2 - 5);
+    ctx.lineTo(-sh.w / 2, sh.h / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "hsl(" + (30 + Math.random() * 30) + ", 100%, 60%)";
+    ctx.beginPath();
+    ctx.moveTo(-5, sh.h / 2);
+    ctx.lineTo(0, sh.h / 2 + 8 + Math.random() * 6);
+    ctx.lineTo(5, sh.h / 2);
+    ctx.fill();
+    ctx.restore();
+
+    // anel de escudo
+    if ((game.buffs[PW.SHIELD] || 0) > 0) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(77,221,255," + (0.5 + 0.3 * Math.sin(game.elapsed / 120)) + ")";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#4df"; ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(sh.x, sh.y, sh.w * 0.95, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawObstacles() {
+    var i, o;
+    for (i = 0; i < game.obstacles.length; i++) {
+      o = game.obstacles[i];
+      var ratio = o.hp / o.maxhp;             // 1 -> intacto, 0 -> quase quebrado
+      var hue = 28;
+      var light = 30 + ratio * 25;            // mais escuro conforme dano
+      ctx.fillStyle = "hsl(" + hue + ", 45%, " + light + "%)";
+      ctx.strokeStyle = "hsl(" + hue + ", 50%, " + (light + 18) + "%)";
+      ctx.lineWidth = 2;
+      var x = o.x - o.w / 2, y = o.y - o.h / 2;
+      ctx.fillRect(x, y, o.w, o.h);
+      ctx.strokeRect(x, y, o.w, o.h);
+      // "trincas" conforme o dano
+      if (ratio < 0.75) {
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + o.w * 0.3, y); ctx.lineTo(x + o.w * 0.45, y + o.h);
+        if (ratio < 0.5) { ctx.moveTo(x + o.w * 0.7, y); ctx.lineTo(x + o.w * 0.55, y + o.h); }
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawPowerups() {
+    var i, pu;
+    for (i = 0; i < game.powerups.length; i++) {
+      pu = game.powerups[i];
+      var col = buffColor(pu.type);
+      ctx.save();
+      ctx.fillStyle = col;
+      ctx.shadowColor = col; ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(pu.x, pu.y, pu.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#05060f";
+      ctx.font = "bold 14px Courier New";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(buffSymbol(pu.type), pu.x, pu.y + 1);
+      ctx.restore();
+    }
+  }
+
+  function drawMeteors() {
+    var i, m;
+    for (i = 0; i < game.meteors.length; i++) {
+      m = game.meteors[i];
+      ctx.save();
+      // rastro de fogo
+      ctx.fillStyle = "rgba(255,140,40,0.25)";
+      ctx.beginPath();
+      ctx.moveTo(m.x - m.r * 0.5, m.y - m.r);
+      ctx.lineTo(m.x + m.r * 0.5, m.y - m.r);
+      ctx.lineTo(m.x, m.y - m.r * 2.6);
+      ctx.closePath();
+      ctx.fill();
+      // corpo rochoso
+      ctx.translate(m.x, m.y);
+      ctx.rotate(m.rot);
+      var g = ctx.createRadialGradient(-m.r * 0.3, -m.r * 0.3, m.r * 0.2, 0, 0, m.r);
+      g.addColorStop(0, "#9a9088");
+      g.addColorStop(1, "#4a443e");
+      ctx.fillStyle = g;
+      ctx.strokeStyle = "#2a2520";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, m.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // crateras
+      ctx.fillStyle = "rgba(0,0,0,0.30)";
+      ctx.beginPath(); ctx.arc(-m.r * 0.3, m.r * 0.15, m.r * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(m.r * 0.35, -m.r * 0.25, m.r * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawBuffTimers() {
+    var order = [PW.SHIELD, PW.POWER, PW.TRIPLE];
+    var by = 34;
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = "bold 13px Courier New";
+    for (var i = 0; i < order.length; i++) {
+      var t = order[i], ms = game.buffs[t] || 0;
+      if (ms <= 0) { continue; }
+      ctx.fillStyle = buffColor(t);
+      ctx.shadowColor = "#000"; ctx.shadowBlur = 4;
+      ctx.fillText(buffSymbol(t) + " " + Math.ceil(ms / 1000) + "s", 14, by);
+      by += 17;
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    var i, e, b, p;
+    for (i = 0; i < game.stars.length; i++) {
+      var s = game.stars[i];
+      ctx.fillStyle = "rgba(200,210,255," + (0.3 + s.s * 0.3) + ")";
+      ctx.fillRect(s.x, s.y, s.s, s.s);
+    }
+
+    if (game.state === STATE.MENU) { return; }
+
+    drawObstacles();
+    drawPowerups();
+    drawMeteors();
+
+    // bullets
+    for (i = 0; i < game.bullets.length; i++) {
+      b = game.bullets[i];
+      ctx.fillStyle = b.big ? "#fc4" : "#ffdd44";
+      ctx.shadowColor = b.big ? "#f80" : "#fa0";
+      ctx.shadowBlur = b.big ? 12 : 8;
+      var bw = b.big ? 6 : 4;
+      ctx.fillRect(b.x - bw / 2, b.y - 8, bw, b.big ? 16 : 12);
+    }
+    ctx.shadowBlur = 0;
+
+    // enemies
+    for (i = 0; i < game.enemies.length; i++) {
+      e = game.enemies[i];
+      ctx.fillStyle = "hsl(" + e.hue + ", 80%, 60%)";
+      ctx.shadowColor = "hsl(" + e.hue + ", 90%, 50%)";
+      ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#300";
+      ctx.beginPath(); ctx.arc(e.x, e.y + 1, e.r * 0.16, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    // partículas
+    for (i = 0; i < game.particles.length; i++) {
+      p = game.particles[i];
+      ctx.fillStyle = "hsla(" + p.hue + ", 90%, 60%, " + p.life + ")";
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+
+    if (game.state === STATE.PLAYING || game.state === STATE.PAUSED) { drawShip(); }
+    drawBuffTimers();
+
+    if (game.state === STATE.PAUSED) {
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.font = "24px Courier New";
+      ctx.fillText("PAUSADO", W / 2, H / 2);
+      ctx.font = "12px Courier New";
+      ctx.fillText("pressione P para continuar", W / 2, H / 2 + 24);
+    }
+  }
+
+  // ---- Loop -----------------------------------------------------------
+  var last = performance.now();
+  function loop(now) {
+    var dt = Math.min(50, now - last);
+    last = now;
+    var f = dt / (1000 / 60);
+    update(dt, f);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- Init -----------------------------------------------------------
+  bindKeys();
+  game.stars = makeStars();
+  dom.startBtn.addEventListener("click", startGame);
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

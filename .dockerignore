@@ -1,0 +1,9 @@
+# Mantém o contexto de build pequeno
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
+*.md
+.git
+.gitignore
+.vscode

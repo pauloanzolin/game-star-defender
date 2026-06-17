@@ -1,0 +1,13 @@
+services:
+  star-defender:
+    build: .
+    image: star-defender:latest
+    container_name: star-defender
+    ports:
+      - "3550:80"          # acesse em http://star-defender:3550
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://star-defender/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
