@@ -13,7 +13,7 @@ star-defender/
 ├─ index.html          # o jogo (arquivo único, sem dependências)
 ├─ Dockerfile          # imagem nginx:alpine + o jogo
 ├─ nginx.conf          # config do servidor (gzip, cache, segurança)
-├─ docker-compose.yml  # orquestração (porta 8080 -> 80)
+├─ docker-compose.yml  # orquestração (porta 3550 -> 80)
 ├─ .dockerignore
 ├─ .gitignore
 ├─ VERSION             # versão atual (SemVer)
@@ -31,7 +31,7 @@ star-defender/
 docker compose up -d --build
 ```
 
-Acesse: **http://localhost:8080**
+Acesse: **http://localhost:3550**
 
 Parar / remover:
 
@@ -46,7 +46,7 @@ docker compose down
 docker build -t star-defender:latest .
 
 # rodar o container
-docker run -d --name star-defender -p 8080:80 star-defender:latest
+docker run -d --name star-defender -p 3550:80 star-defender:latest
 ```
 
 Parar / remover:
@@ -59,7 +59,7 @@ docker rm -f star-defender
 
 - Imagem final fica em torno de ~50 MB (base `nginx:1.27-alpine`).
 - O HTML não é cacheado (sempre pega a versão mais recente do jogo).
-- Para trocar a porta, ajuste `8080:80` no `docker-compose.yml` ou o `-p` no `docker run`.
+- Para trocar a porta, ajuste `3550:80` no `docker-compose.yml` ou o `-p` no `docker run`.
 - `HEALTHCHECK` configurado: `docker ps` mostra o status `healthy`.
 
 ## Versionamento & publicação (DevOps)
