@@ -59,6 +59,57 @@
   #overlay p { font-size: 13px; line-height: 1.7; color: #aab; margin-bottom: 16px; }
   #overlay .key { color: #6cf; }
   #overlay .pw { display:inline-block; min-width: 14px; font-weight: bold; }
+  #ovScore { font-size: 15px; color: #cfe; margin-bottom: 12px; line-height: 1.6; }
+  #ovScore b { color: #ffcc44; }
+  #nameRow { margin-bottom: 14px; font-size: 13px; color: #aab; }
+  #playerName {
+    font-family: inherit;
+    font-size: 14px;
+    text-align: center;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    width: 170px;
+    margin-left: 6px;
+    padding: 7px 10px;
+    background: #0b1024;
+    color: #6cf;
+    border: 1px solid #335;
+    border-radius: 6px;
+    outline: none;
+  }
+  #playerName:focus { border-color: #4af; box-shadow: 0 0 10px #4af6; }
+  #board {
+    margin-top: 18px;
+    width: 320px;
+    max-width: 90%;
+  }
+  #board h3 {
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: #6cf;
+    margin-bottom: 8px;
+  }
+  #boardList {
+    list-style: none;
+    text-align: left;
+    font-size: 13px;
+    max-height: 168px;
+    overflow-y: auto;
+  }
+  #boardList li {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-bottom: 1px solid #1a2240;
+    color: #bcd;
+  }
+  #boardList li .rk { color: #668; width: 26px; }
+  #boardList li .nm { flex: 1; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #boardList li .sc { color: #ffcc44; font-weight: bold; }
+  #boardList li.top1 .nm { color: #ffd34d; }
+  #boardList li.me { background: #16306022; }
+  #boardList li.me .nm { color: #6f6; }
+  #boardList .empty { color: #557; justify-content: center; }
   button {
     font-family: inherit;
     font-size: 15px;
@@ -98,8 +149,8 @@
       <span>VIDAS: <b id="lives">3</b></span>
     </div>
     <div id="overlay">
-      <h2>STAR DEFENDER</h2>
-      <p>
+      <h2 id="ovTitle">STAR DEFENDER</h2>
+      <p id="ovDesc">
         <span class="key">&larr; &uarr; &darr; &rarr;</span> / <span class="key">WASD</span> mover &middot;
         <span class="key">ESPA&Ccedil;O</span> atirar &middot;
         <span class="key">P</span> pausar<br>
@@ -107,15 +158,24 @@
         <b>2 batidas = explode e perde 1 vida.</b><br>
         Tijolos <span class="pw" style="color:#c96">&#9646;</span> &mdash; desvie ou destrua a tiros.<br>
         Meteoros <span class="pw" style="color:#988">&#9679;</span> indestrut&iacute;veis &mdash; <b>s&oacute; d&aacute; pra desviar!</b><br>
-        Pegue os power-ups (30s):<br>
-        <span class="pw" style="color:#4df">&#9679;</span> Escudo &nbsp;
-        <span class="pw" style="color:#fc4">&#9679;</span> For&ccedil;a (tiro perfurante) &nbsp;
-        <span class="pw" style="color:#6f6">&#9679;</span> Tiro triplo
+        Power-ups (30s):
+        <span class="pw" style="color:#4df">&#9679;</span>Escudo
+        <span class="pw" style="color:#fc4">&#9679;</span>For&ccedil;a
+        <span class="pw" style="color:#6f6">&#9679;</span>Triplo
       </p>
+      <div id="ovScore"></div>
+      <div id="nameRow">
+        <label>Jogador:<input id="playerName" type="text" maxlength="12"
+               placeholder="SEU NOME" autocomplete="off"></label>
+      </div>
       <button id="startBtn" type="button">INICIAR</button>
+      <div id="board">
+        <h3>&#127942; RECORDES</h3>
+        <ol id="boardList"></ol>
+      </div>
     </div>
   </div>
-  <div class="hint">recorde: <b id="best">0</b> &middot; feito para teste r&aacute;pido</div>
+  <div class="hint">v1.1 &middot; recorde: <b id="best">0</b> &middot; ranking competitivo</div>
   <pre id="errbar"></pre>
 
 <script>
@@ -171,7 +231,10 @@ document.addEventListener("DOMContentLoaded", function () {
     HITS_TO_EXPLODE: 2,         // 2 batidas -> explode e perde 1 vida
     INVULN_AFTER_HIT: 900,      // i-frames após uma batida (ms)
     INVULN_AFTER_LIFE: 1700,    // i-frames após explodir/perder vida (ms)
-    STORAGE_KEY: "stardefender_best"
+    BOARD_MAX: 10,              // quantos recordes exibir
+    STORAGE_KEY: "stardefender_best",
+    SCORES_KEY: "stardefender_scores",
+    NAME_KEY: "stardefender_name"
   };
 
   var STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
@@ -189,8 +252,11 @@ document.addEventListener("DOMContentLoaded", function () {
     best: document.getElementById("best"),
     overlay: document.getElementById("overlay"),
     startBtn: document.getElementById("startBtn"),
-    title: document.querySelector("#overlay h2"),
-    desc: document.querySelector("#overlay p")
+    title: document.getElementById("ovTitle"),
+    desc: document.getElementById("ovDesc"),
+    ovScore: document.getElementById("ovScore"),
+    playerName: document.getElementById("playerName"),
+    boardList: document.getElementById("boardList")
   };
 
   // ---- Persistência segura -------------------------------------------
@@ -201,22 +267,95 @@ document.addEventListener("DOMContentLoaded", function () {
     },
     save: function (v) {
       try { localStorage.setItem(CONFIG.STORAGE_KEY, String(v)); } catch (e) {}
+    },
+    // ---- Ranking competitivo (lista de recordes) ----
+    loadScores: function () {
+      try {
+        var raw = localStorage.getItem(CONFIG.SCORES_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) { return []; }
+    },
+    saveScores: function (arr) {
+      try { localStorage.setItem(CONFIG.SCORES_KEY, JSON.stringify(arr)); } catch (e) {}
+    },
+    loadName: function () {
+      try { return localStorage.getItem(CONFIG.NAME_KEY) || ""; } catch (e) { return ""; }
+    },
+    saveName: function (n) {
+      try { localStorage.setItem(CONFIG.NAME_KEY, n); } catch (e) {}
     }
   };
+
+  // ---- Ranking: registrar e renderizar -------------------------------
+  // Mantém em memória; persiste no localStorage. Ordenado do maior p/ o menor.
+  var scores = storage.loadScores();
+  var lastEntry = null;   // referência da última pontuação registrada (p/ destaque)
+
+  function sanitizeName(raw) {
+    var n = (raw || "").trim().toUpperCase().slice(0, 12);
+    return n || "ANÔNIMO";
+  }
+
+  // Registra uma pontuação e devolve o objeto inserido.
+  function recordScore(name, score) {
+    var entry = { name: sanitizeName(name), score: score, ts: game.elapsed };
+    scores.push(entry);
+    scores.sort(function (a, b) { return b.score - a.score; }); // maior -> menor
+    storage.saveScores(scores);
+    return entry;
+  }
+
+  function renderBoard() {
+    var list = dom.boardList;
+    list.innerHTML = "";
+    if (!scores.length) {
+      var li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "Nenhum recorde ainda — seja o primeiro!";
+      list.appendChild(li);
+      return;
+    }
+    var top = scores.slice(0, CONFIG.BOARD_MAX);
+    for (var i = 0; i < top.length; i++) {
+      var e = top[i];
+      var li2 = document.createElement("li");
+      if (i === 0) { li2.className = "top1"; }
+      if (e === lastEntry) { li2.className += " me"; }
+
+      var rk = document.createElement("span");
+      rk.className = "rk";
+      rk.textContent = (i + 1) + ".";
+      var nm = document.createElement("span");
+      nm.className = "nm";
+      nm.textContent = e.name;            // textContent evita injeção de HTML
+      var sc = document.createElement("span");
+      sc.className = "sc";
+      sc.textContent = e.score;
+
+      li2.appendChild(rk); li2.appendChild(nm); li2.appendChild(sc);
+      list.appendChild(li2);
+    }
+  }
 
   // ---- Teclado --------------------------------------------------------
   var keys = Object.create(null);
   function bindKeys() {
     var tracked = ["arrowleft", "arrowright", "arrowup", "arrowdown",
                    "a", "d", "w", "s", " "];
+    function typing(e) { return e.target && e.target.tagName === "INPUT"; }
     window.addEventListener("keydown", function (e) {
+      if (typing(e)) { return; }   // não captura teclas enquanto digita o nome
       var k = e.key.toLowerCase();
       if (k === "arrowleft" || k === "arrowright" || k === " " ||
           k === "arrowup" || k === "arrowdown") { e.preventDefault(); }
       if (tracked.indexOf(k) !== -1) { keys[k] = true; }
       if (k === "p") { togglePause(); }
     });
-    window.addEventListener("keyup", function (e) { keys[e.key.toLowerCase()] = false; });
+    window.addEventListener("keyup", function (e) {
+      if (typing(e)) { return; }
+      keys[e.key.toLowerCase()] = false;
+    });
   }
 
   // ---- Estado ---------------------------------------------------------
@@ -233,7 +372,7 @@ document.addEventListener("DOMContentLoaded", function () {
     buffs: {},                 // type -> ms restantes
     score: 0,
     lives: 0,
-    best: storage.load(),
+    best: scores.length ? scores[0].score : storage.load(),
     elapsed: 0,                // ms de jogo (para dificuldade por tempo)
     level: 1,
     diff: 0,
@@ -292,6 +431,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ---- Ciclo ----------------------------------------------------------
   function startGame() {
+    // guarda o nome digitado para a próxima vez e para registrar o recorde
+    storage.saveName(dom.playerName.value.trim());
+    lastEntry = null;
     game.ship = { x: W / 2, y: H - 60, w: 28, h: 22, hits: 0, invuln: 0 };
     game.bullets = [];
     game.enemies = [];
@@ -323,14 +465,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function gameOver() {
     game.state = STATE.GAMEOVER;
-    if (game.score > game.best) { game.best = game.score; storage.save(game.best); }
+
+    // registra a proeza no ranking (do maior para o menor)
+    var rankTxt = "";
+    if (game.score > 0) {
+      lastEntry = recordScore(dom.playerName.value, game.score);
+      var pos = scores.indexOf(lastEntry) + 1;
+      rankTxt = (pos === 1)
+        ? '<br>&#127942; <b>NOVO L&Iacute;DER!</b> 1&ordm; lugar'
+        : '<br>Voc&ecirc; ficou em <b>' + pos + '&ordm;</b> lugar';
+    }
+    game.best = scores.length ? scores[0].score : game.best;
+    storage.save(game.best);
     updateHUD();
+
     dom.title.textContent = "FIM DE JOGO";
-    dom.desc.innerHTML =
-      'Pontua&ccedil;&atilde;o: <span class="key">' + game.score + '</span> &middot; ' +
-      'N&iacute;vel: <span class="key">' + game.level + '</span><br>' +
-      'Recorde: <span class="key">' + game.best + '</span>';
+    dom.desc.style.display = "none";
+    dom.ovScore.style.display = "block";
+    dom.ovScore.innerHTML =
+      'Pontua&ccedil;&atilde;o: <b>' + game.score + '</b> &middot; N&iacute;vel: <b>' +
+      game.level + '</b>' + rankTxt;
     dom.startBtn.textContent = "JOGAR DE NOVO";
+    renderBoard();
     dom.overlay.classList.remove("hidden");
   }
 
@@ -853,7 +1009,15 @@ document.addEventListener("DOMContentLoaded", function () {
   // ---- Init -----------------------------------------------------------
   bindKeys();
   game.stars = makeStars();
+  dom.best.textContent = game.best;
+  dom.ovScore.style.display = "none";
+  dom.playerName.value = storage.loadName();
+  renderBoard();
   dom.startBtn.addEventListener("click", startGame);
+  // Enter no campo de nome também inicia
+  dom.playerName.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); startGame(); }
+  });
   requestAnimationFrame(loop);
 });
 </script>

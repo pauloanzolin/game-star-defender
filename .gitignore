@@ -1,0 +1,17 @@
+# Artefatos de SO / editores
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Logs e temporários
+*.log
+*.tmp
+tmp/
+
+# Pacotes gerados
+*.zip
+
+# Docker (estado local)
+.docker/
