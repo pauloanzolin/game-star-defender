@@ -24,7 +24,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8080:80"               # acesse em http://localhost:8080
+      - "3550:80"               # acesse em http://localhost:3550
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
