@@ -4,6 +4,13 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.1] - 2026-06-19
+
+### Alterado
+- Os obstáculos passam a ser desenhados como **cometas** (cabeça gelada com
+  cauda) no lugar dos tijolos. Apenas o visual mudou — hitbox, HP, destruição a
+  tiros e dano ao colidir permanecem idênticos.
+
 ## [1.3.0] - 2026-06-19
 
 ### Adicionado
@@ -67,6 +74,7 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.3.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.1
 [1.3.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.0
 [1.2.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.1
 [1.2.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.0

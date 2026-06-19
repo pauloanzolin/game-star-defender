@@ -157,7 +157,7 @@
         <span class="key">P</span> pausar<br>
         O cen&aacute;rio corre sempre para frente e acelera!<br>
         <b>2 batidas = explode e perde 1 vida.</b><br>
-        Tijolos <span class="pw" style="color:#c96">&#9646;</span> &mdash; desvie ou destrua a tiros.<br>
+        Cometas <span class="pw" style="color:#6cf">&#9732;</span> &mdash; desvie ou destrua a tiros.<br>
         Meteoros <span class="pw" style="color:#988">&#9679;</span> indestrut&iacute;veis &mdash; <b>s&oacute; d&aacute; pra desviar!</b><br>
         Power-ups (30s):
         <span class="pw" style="color:#4df">&#9679;</span>Escudo
@@ -178,7 +178,7 @@
       </div>
     </div>
   </div>
-  <div class="hint">v1.3.0 &middot; recorde: <b id="best">0</b> &middot; ranking global em tempo real</div>
+  <div class="hint">v1.3.1 &middot; recorde: <b id="best">0</b> &middot; ranking global em tempo real</div>
   <pre id="errbar"></pre>
 
 <script>
@@ -970,28 +970,54 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  // Desenha os obstáculos como COMETAS (apenas visual; hitbox/comportamento
+  // continuam os mesmos: o.w x o.h, com HP e destruição a tiros).
   function drawObstacles() {
     var i, o;
     for (i = 0; i < game.obstacles.length; i++) {
       o = game.obstacles[i];
-      var ratio = o.hp / o.maxhp;             // 1 -> intacto, 0 -> quase quebrado
-      var hue = 28;
-      var light = 30 + ratio * 25;            // mais escuro conforme dano
-      ctx.fillStyle = "hsl(" + hue + ", 45%, " + light + "%)";
-      ctx.strokeStyle = "hsl(" + hue + ", 50%, " + (light + 18) + "%)";
-      ctx.lineWidth = 2;
-      var x = o.x - o.w / 2, y = o.y - o.h / 2;
-      ctx.fillRect(x, y, o.w, o.h);
-      ctx.strokeRect(x, y, o.w, o.h);
-      // "trincas" conforme o dano
+      var ratio = o.hp / o.maxhp;             // 1 intacto -> 0 quase destruído
+      var rx = o.w / 2, ry = o.h / 2;          // raio da cabeça = hitbox
+      var hue = 188;                           // ciano gelado
+      ctx.save();
+
+      // cauda: apontando para cima (sentido oposto ao movimento, que é p/ baixo)
+      var tailLen = o.h * (1.8 + ratio * 1.4);
+      var g = ctx.createLinearGradient(o.x, o.y - tailLen, o.x, o.y);
+      g.addColorStop(0, "rgba(120,220,255,0)");
+      g.addColorStop(1, "rgba(150,235,255," + (0.35 + ratio * 0.3) + ")");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(o.x - rx * 0.6, o.y);
+      ctx.lineTo(o.x + rx * 0.6, o.y);
+      ctx.lineTo(o.x, o.y - tailLen);
+      ctx.closePath();
+      ctx.fill();
+
+      // cabeça gelada (preenche o hitbox como elipse) com brilho
+      var rg = ctx.createRadialGradient(o.x - rx * 0.3, o.y - ry * 0.3, ry * 0.2,
+                                        o.x, o.y, rx);
+      rg.addColorStop(0, "#ffffff");
+      rg.addColorStop(0.5, "hsl(" + hue + ", 90%, " + (58 + ratio * 14) + "%)");
+      rg.addColorStop(1, "hsl(" + hue + ", 80%, " + (30 + ratio * 12) + "%)");
+      ctx.fillStyle = rg;
+      ctx.shadowColor = "hsl(" + hue + ", 100%, 60%)";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.ellipse(o.x, o.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // fraturas conforme o dano
       if (ratio < 0.75) {
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(8,28,40,0.55)";
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(x + o.w * 0.3, y); ctx.lineTo(x + o.w * 0.45, y + o.h);
-        if (ratio < 0.5) { ctx.moveTo(x + o.w * 0.7, y); ctx.lineTo(x + o.w * 0.55, y + o.h); }
+        ctx.moveTo(o.x - rx * 0.5, o.y - ry * 0.2); ctx.lineTo(o.x + rx * 0.1, o.y + ry * 0.6);
+        if (ratio < 0.5) { ctx.moveTo(o.x + rx * 0.5, o.y - ry * 0.3); ctx.lineTo(o.x - rx * 0.15, o.y + ry * 0.5); }
         ctx.stroke();
       }
+      ctx.restore();
     }
   }
 
