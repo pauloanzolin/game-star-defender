@@ -1,21 +1,39 @@
 # ★ Star Defender
 
-[![version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.2.0-blue)](CHANGELOG.md)
 
-Micro jogo arcade (scroller infinito) em HTML5 Canvas, servido por **nginx** em um container.
+Micro jogo arcade (scroller infinito) em HTML5 Canvas, com **ranking global em
+tempo real**. Empacotado em Docker (nginx + API Node).
 
-> **v1.1** — ranking competitivo: informe seu nome e dispute a lista de recordes!
+> **v1.2** — ranking GLOBAL ao vivo: a lista de recordes é compartilhada entre
+> todos os jogadores e atualiza em tempo real (Server-Sent Events).
+
+## Arquitetura
+
+```
+Navegador ──HTTP──► nginx (web:80) ──┬─ /        -> index.html (jogo)
+                                     └─ /api/*   -> api:3000 (Node + SSE)
+                                                     └─ volume sd-scores (JSON)
+```
+
+O jogo abre uma conexão **SSE** em `/api/stream`; quando qualquer jogador
+registra um recorde (`POST /api/scores`), o servidor transmite o novo ranking
+para todos os clientes conectados. Sem servidor acessível, o jogo cai para um
+placar local (`localStorage`) e exibe `○ offline`.
 
 ## Estrutura
 
 ```
 star-defender/
-├─ index.html          # o jogo (arquivo único, sem dependências)
+├─ index.html          # o jogo (arquivo único, front-end)
 ├─ Dockerfile          # imagem nginx:alpine + o jogo
-├─ nginx.conf          # config do servidor (gzip, cache, segurança)
-├─ docker-compose.yml  # orquestração (porta 8080 -> 80)
-├─ .dockerignore
-├─ .gitignore
+├─ nginx.conf          # serve o jogo e faz proxy de /api (SSE-friendly)
+├─ docker-compose.yml  # sobe web (nginx) + api (Node) + volume do ranking
+├─ server/             # API de ranking global em tempo real
+│  ├─ server.js        # Node puro: REST + SSE, persistência em JSON
+│  ├─ package.json
+│  └─ Dockerfile
+├─ .dockerignore / .gitignore
 ├─ VERSION             # versão atual (SemVer)
 ├─ CHANGELOG.md        # histórico de versões
 └─ scripts/
@@ -41,8 +59,12 @@ docker compose down
 
 ## Subir só com Docker (sem compose)
 
+> ⚠️ O **ranking global em tempo real** depende da API (`server/`). Apenas o
+> container `web` faz o jogo funcionar, mas o placar fica em modo offline
+> (local). Para o ranking compartilhado, use o **docker compose** acima.
+
 ```powershell
-# build da imagem
+# build da imagem (apenas o front-end / jogo)
 docker build -t star-defender:latest .
 
 # rodar o container
@@ -69,7 +91,8 @@ Projeto segue **SemVer** e **Conventional Commits**; releases marcadas com **tag
 | Versão | Destaque |
 |--------|----------|
 | v1.0.0 | Lançamento inicial do jogo |
-| v1.1.0 | Ranking competitivo (lista de recordes) |
+| v1.1.0 | Ranking competitivo (lista de recordes local) |
+| v1.2.0 | Ranking global em tempo real (backend Node + SSE) |
 
 ### Publicar a v1.1 no GitHub
 

@@ -4,6 +4,23 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2026-06-19
+
+### Adicionado
+- **Ranking GLOBAL em tempo real**: backend Node (Server-Sent Events) que
+  compartilha a lista de recordes entre todos os jogadores.
+- Atualização ao vivo — quando alguém registra um recorde, o placar de todos
+  os clientes conectados muda na hora (sem recarregar).
+- Indicador de status do placar (`● ao vivo` / `○ offline`).
+- API: `GET /api/scores`, `POST /api/scores`, `GET /api/stream` (SSE),
+  `GET /api/health`. Persistência em volume Docker.
+- `docker-compose` agora sobe dois serviços (web + api) com proxy do nginx.
+
+### Alterado
+- O placar passa a refletir o servidor quando online; o `localStorage` vira
+  apenas fallback offline.
+- Destaque da própria pontuação agora por `id` retornado pelo servidor.
+
 ## [1.1.0] - 2026-06-19
 
 ### Adicionado
@@ -31,5 +48,6 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.2.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.0
 [1.1.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.1.0
 [1.0.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.0.0

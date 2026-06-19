@@ -89,6 +89,7 @@
     color: #6cf;
     margin-bottom: 8px;
   }
+  #boardStatus { font-size: 10px; letter-spacing: 1px; color: #557; margin-left: 6px; }
   #boardList {
     list-style: none;
     text-align: left;
@@ -170,12 +171,12 @@
       </div>
       <button id="startBtn" type="button">INICIAR</button>
       <div id="board">
-        <h3>&#127942; RECORDES</h3>
+        <h3>&#127942; RECORDES GLOBAIS <span id="boardStatus"></span></h3>
         <ol id="boardList"></ol>
       </div>
     </div>
   </div>
-  <div class="hint">v1.1 &middot; recorde: <b id="best">0</b> &middot; ranking competitivo</div>
+  <div class="hint">v1.2 &middot; recorde: <b id="best">0</b> &middot; ranking global em tempo real</div>
   <pre id="errbar"></pre>
 
 <script>
@@ -234,7 +235,10 @@ document.addEventListener("DOMContentLoaded", function () {
     BOARD_MAX: 10,              // quantos recordes exibir
     STORAGE_KEY: "stardefender_best",
     SCORES_KEY: "stardefender_scores",
-    NAME_KEY: "stardefender_name"
+    NAME_KEY: "stardefender_name",
+    // Ranking GLOBAL em tempo real: mesma origem quando servido por nginx;
+    // via file:// aponta para a stack local (CORS liberado no servidor).
+    API_BASE: (location.protocol === "file:" ? "http://localhost:8080/api" : "/api")
   };
 
   var STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
@@ -256,7 +260,8 @@ document.addEventListener("DOMContentLoaded", function () {
     desc: document.getElementById("ovDesc"),
     ovScore: document.getElementById("ovScore"),
     playerName: document.getElementById("playerName"),
-    boardList: document.getElementById("boardList")
+    boardList: document.getElementById("boardList"),
+    boardStatus: document.getElementById("boardStatus")
   };
 
   // ---- Persistência segura -------------------------------------------
@@ -287,23 +292,69 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   };
 
-  // ---- Ranking: registrar e renderizar -------------------------------
-  // Mantém em memória; persiste no localStorage. Ordenado do maior p/ o menor.
+  // ---- Ranking: estado, comunicação e renderização -------------------
+  // `scores` é a lista exibida. Online: reflete o servidor (tempo real via SSE).
+  // Offline: cai para o localStorage (fallback).
   var scores = storage.loadScores();
-  var lastEntry = null;   // referência da última pontuação registrada (p/ destaque)
+  var lastEntryId = null;     // id da última pontuação do jogador (p/ destaque)
+  var online = false;         // conectado ao ranking global?
 
   function sanitizeName(raw) {
     var n = (raw || "").trim().toUpperCase().slice(0, 12);
     return n || "ANÔNIMO";
   }
 
-  // Registra uma pontuação e devolve o objeto inserido.
-  function recordScore(name, score) {
-    var entry = { name: sanitizeName(name), score: score, ts: game.elapsed };
+  function makeId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // Registro LOCAL (fallback quando o servidor está indisponível).
+  function recordScoreLocal(name, score) {
+    var entry = { id: makeId(), name: sanitizeName(name), score: score, ts: Date.now() };
     scores.push(entry);
-    scores.sort(function (a, b) { return b.score - a.score; }); // maior -> menor
+    scores.sort(function (a, b) { return b.score - a.score; });
     storage.saveScores(scores);
     return entry;
+  }
+
+  // ---- Comunicação com a API de ranking global ----
+  var remote = {
+    base: CONFIG.API_BASE,
+    es: null,
+    submit: function (name, score, cb) {
+      try {
+        fetch(this.base + "/scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name, score: score })
+        }).then(function (r) { return r.json(); })
+          .then(function (d) { cb(d); })
+          .catch(function () { cb(null); });
+      } catch (e) { cb(null); }
+    },
+    connect: function (onData) {
+      if (!window.EventSource) { return; }
+      try {
+        var es = new EventSource(this.base + "/stream");
+        es.addEventListener("scores", function (ev) {
+          try { onData(JSON.parse(ev.data)); } catch (e) {}
+        });
+        es.onopen = function () { online = true; updateBoardStatus(); };
+        es.onerror = function () { online = false; updateBoardStatus(); };
+        this.es = es;
+      } catch (e) {}
+    }
+  };
+
+  function updateBoardStatus() {
+    if (!dom.boardStatus) { return; }
+    if (online) {
+      dom.boardStatus.textContent = "● ao vivo";
+      dom.boardStatus.style.color = "#6f6";
+    } else {
+      dom.boardStatus.textContent = "○ offline (local)";
+      dom.boardStatus.style.color = "#a76";
+    }
   }
 
   function renderBoard() {
@@ -321,7 +372,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var e = top[i];
       var li2 = document.createElement("li");
       if (i === 0) { li2.className = "top1"; }
-      if (e === lastEntry) { li2.className += " me"; }
+      if (e.id && e.id === lastEntryId) { li2.className += " me"; }
 
       var rk = document.createElement("span");
       rk.className = "rk";
@@ -433,7 +484,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function startGame() {
     // guarda o nome digitado para a próxima vez e para registrar o recorde
     storage.saveName(dom.playerName.value.trim());
-    lastEntry = null;
+    lastEntryId = null;
     game.ship = { x: W / 2, y: H - 60, w: 28, h: 22, hits: 0, invuln: 0 };
     game.bullets = [];
     game.enemies = [];
@@ -463,31 +514,53 @@ document.addEventListener("DOMContentLoaded", function () {
     else if (game.state === STATE.PAUSED) { game.state = STATE.PLAYING; }
   }
 
+  function rankHtml(pos) {
+    if (!pos) { return ""; }
+    return (pos === 1)
+      ? '<br>&#127942; <b>NOVO L&Iacute;DER!</b> 1&ordm; lugar'
+      : '<br>Voc&ecirc; ficou em <b>' + pos + '&ordm;</b> lugar';
+  }
+
+  function showOver(pos, sending) {
+    dom.ovScore.innerHTML =
+      'Pontua&ccedil;&atilde;o: <b>' + game.score + '</b> &middot; N&iacute;vel: <b>' +
+      game.level + '</b>' +
+      (sending ? '<br><span style="color:#778">enviando ao ranking…</span>' : rankHtml(pos));
+  }
+
   function gameOver() {
     game.state = STATE.GAMEOVER;
-
-    // registra a proeza no ranking (do maior para o menor)
-    var rankTxt = "";
-    if (game.score > 0) {
-      lastEntry = recordScore(dom.playerName.value, game.score);
-      var pos = scores.indexOf(lastEntry) + 1;
-      rankTxt = (pos === 1)
-        ? '<br>&#127942; <b>NOVO L&Iacute;DER!</b> 1&ordm; lugar'
-        : '<br>Voc&ecirc; ficou em <b>' + pos + '&ordm;</b> lugar';
-    }
-    game.best = scores.length ? scores[0].score : game.best;
-    storage.save(game.best);
-    updateHUD();
+    var nome = dom.playerName.value;
 
     dom.title.textContent = "FIM DE JOGO";
     dom.desc.style.display = "none";
     dom.ovScore.style.display = "block";
-    dom.ovScore.innerHTML =
-      'Pontua&ccedil;&atilde;o: <b>' + game.score + '</b> &middot; N&iacute;vel: <b>' +
-      game.level + '</b>' + rankTxt;
     dom.startBtn.textContent = "JOGAR DE NOVO";
-    renderBoard();
     dom.overlay.classList.remove("hidden");
+
+    if (game.score <= 0) { showOver(0, false); renderBoard(); return; }
+
+    showOver(0, true);   // "enviando…" enquanto o servidor responde
+
+    remote.submit(nome, game.score, function (resp) {
+      if (resp && resp.ok) {
+        // sucesso: o servidor devolve o ranking global atualizado + posição
+        online = true; updateBoardStatus();
+        lastEntryId = resp.id;
+        scores = resp.scores || scores;
+        showOver(resp.rank, false);
+      } else {
+        // fallback offline: registra localmente
+        online = false; updateBoardStatus();
+        var e = recordScoreLocal(nome, game.score);
+        lastEntryId = e.id;
+        showOver(scores.indexOf(e) + 1, false);
+      }
+      game.best = scores.length ? scores[0].score : game.best;
+      storage.save(game.best);
+      updateHUD();
+      renderBoard();
+    });
   }
 
   function spawnEnemy() {
@@ -1012,7 +1085,17 @@ document.addEventListener("DOMContentLoaded", function () {
   dom.best.textContent = game.best;
   dom.ovScore.style.display = "none";
   dom.playerName.value = storage.loadName();
-  renderBoard();
+  renderBoard();           // mostra o que houver (local) imediatamente
+  updateBoardStatus();
+  // conecta ao ranking GLOBAL em tempo real (SSE); atualiza ao vivo p/ todos
+  remote.connect(function (list) {
+    online = true;
+    scores = list;
+    game.best = scores.length ? scores[0].score : game.best;
+    dom.best.textContent = game.best;
+    updateBoardStatus();
+    renderBoard();
+  });
   dom.startBtn.addEventListener("click", startGame);
   // Enter no campo de nome também inicia
   dom.playerName.addEventListener("keydown", function (e) {

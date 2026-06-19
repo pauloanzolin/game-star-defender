@@ -1,13 +1,36 @@
 services:
-  star-defender:
+  api:
+    build: ./server
+    image: star-defender-api:latest
+    container_name: star-defender-api
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+    volumes:
+      - sd-scores:/app/data     # ranking persiste entre reinícios
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  web:
     build: .
     image: star-defender:latest
     container_name: star-defender
+    depends_on:
+      - api
     ports:
-      - "8080:80"          # acesse em http://localhost:8080
+      - "8080:80"               # acesse em http://localhost:8080
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3
+
+volumes:
+  sd-scores:
