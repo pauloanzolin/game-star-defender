@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>★ Star Defender — Micro Arcade ★</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -17,6 +17,9 @@
     justify-content: center;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
   h1 {
     font-size: 18px;
@@ -25,9 +28,17 @@
     color: #6cf;
     text-shadow: 0 0 10px #06a;
   }
-  #wrap { position: relative; }
+  /* Responsivo: o canvas mantém 420x560 internos, mas o tamanho exibido
+     escala para caber na largura E na altura do dispositivo. */
+  #wrap {
+    position: relative;
+    width: min(420px, 96vw, 88vh * 0.75);
+  }
   canvas {
     display: block;
+    width: 100%;
+    height: auto;
+    touch-action: none;            /* impede scroll/zoom ao arrastar a nave */
     background: radial-gradient(circle at 50% 30%, #0d1030 0%, #05060f 70%);
     border: 2px solid #224;
     border-radius: 8px;
@@ -55,6 +66,7 @@
     padding: 10px;
   }
   #overlay.hidden { display: none; }
+  #overlay { overflow-y: auto; }
   #overlay h2 { font-size: 28px; color: #ffcc44; text-shadow: 0 0 12px #a60; margin-bottom: 8px; }
   #overlay p { font-size: 13px; line-height: 1.7; color: #aab; margin-bottom: 16px; }
   #overlay .key { color: #6cf; }
@@ -138,6 +150,14 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
+  /* Telas baixas (celular deitado / pouco espaço vertical) */
+  @media (max-height: 620px) {
+    h1 { font-size: 15px; margin-bottom: 4px; }
+    .hint { margin-top: 6px; }
+    #overlay p { font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
+    #board { margin-top: 8px; }
+    #boardList { max-height: 96px; }
+  }
 </style>
 </head>
 <body>
@@ -155,6 +175,7 @@
         <span class="key">&larr; &uarr; &darr; &rarr;</span> / <span class="key">WASD</span> mover &middot;
         <span class="key">ESPA&Ccedil;O</span> atirar &middot;
         <span class="key">P</span> pausar<br>
+        <span class="key">&#128241; Celular:</span> arraste para mover &middot; tiro autom&aacute;tico<br>
         O cen&aacute;rio corre sempre para frente e acelera!<br>
         <b>2 batidas = explode e perde 1 vida.</b><br>
         Cometas <span class="pw" style="color:#6cf">&#9732;</span> &mdash; desvie ou destrua a tiros.<br>
@@ -178,7 +199,7 @@
       </div>
     </div>
   </div>
-  <div class="hint">v1.3.1 &middot; recorde: <b id="best">0</b> &middot; ranking global em tempo real</div>
+  <div class="hint">v1.4.0 &middot; recorde: <b id="best">0</b> &middot; PC e celular</div>
   <pre id="errbar"></pre>
 
 <script>
@@ -226,6 +247,7 @@ document.addEventListener("DOMContentLoaded", function () {
     METEOR_FALL_MIN: 2.4,
     METEOR_FALL_MAX: 4.2,
     SHIP_RANGE_TOP: 0.12,       // até onde a nave pode subir (fração da altura)
+    TOUCH_Y_OFFSET: 46,         // nave fica acima do dedo (mobile) p/ não tampar
     POWERUP_DURATION: 30000,    // 30s de buff
     POWERUP_SPAWN_MS: 9000,
     POWERUP_FALL: 2,
@@ -416,6 +438,31 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // ---- Toque (mobile): arrasta para mover; tiro é automático ----------
+  function canvasPos(t) {
+    var rect = cv.getBoundingClientRect();
+    return {
+      x: (t.clientX - rect.left) * (W / rect.width),
+      y: (t.clientY - rect.top) * (H / rect.height)
+    };
+  }
+  function bindTouch() {
+    function move(e) {
+      if (e.touches && e.touches.length) {
+        var p = canvasPos(e.touches[0]);
+        game.touch.x = p.x;
+        game.touch.y = p.y;
+        game.touch.active = true;
+      }
+      e.preventDefault();
+    }
+    function end(e) { game.touch.active = false; e.preventDefault(); }
+    cv.addEventListener("touchstart", move, { passive: false });
+    cv.addEventListener("touchmove", move, { passive: false });
+    cv.addEventListener("touchend", end, { passive: false });
+    cv.addEventListener("touchcancel", end, { passive: false });
+  }
+
   // ---- Estado ---------------------------------------------------------
   var game = {
     state: STATE.MENU,
@@ -434,6 +481,7 @@ document.addEventListener("DOMContentLoaded", function () {
     elapsed: 0,                // ms de jogo (para dificuldade por tempo)
     level: 1,
     diff: 0,
+    touch: { x: 0, y: 0, active: false },  // controle por toque (mobile)
     weaponLevel: 0,            // nível de armamento progressivo (0..WEAPON_MAX)
     spawnTimer: 0,
     shootCooldown: 0,
@@ -510,6 +558,7 @@ document.addEventListener("DOMContentLoaded", function () {
     game.level = 1;
     game.diff = 0;
     game.weaponLevel = 0;
+    game.touch.active = false;
     game.spawnTimer = 0;
     game.shootCooldown = 0;
     game.powerupTimer = CONFIG.POWERUP_SPAWN_MS;
@@ -722,20 +771,25 @@ document.addEventListener("DOMContentLoaded", function () {
     // velocidade contínua do cenário (sempre para frente, cresce com a dificuldade)
     var scroll = CONFIG.SCROLL_BASE + game.diff * 0.5;
 
-    // nave: movimento LIVRE nos 4 sentidos (setas + WASD), sem ser bloqueada
+    // nave: TOQUE (mobile) move por posição; senão teclado (setas + WASD)
     var sh = game.ship;
     if (sh.invuln > 0) { sh.invuln = Math.max(0, sh.invuln - dt); }
     var yTop = H * CONFIG.SHIP_RANGE_TOP, yBot = H - sh.h / 2 - 6;
-    if (keys["arrowleft"] || keys["a"]) { sh.x -= CONFIG.SHIP_SPEED * f; }
-    if (keys["arrowright"] || keys["d"]) { sh.x += CONFIG.SHIP_SPEED * f; }
-    if (keys["arrowup"] || keys["w"]) { sh.y -= CONFIG.SHIP_SPEED * f; }
-    if (keys["arrowdown"] || keys["s"]) { sh.y += CONFIG.SHIP_SPEED * f; }
+    if (game.touch.active) {
+      sh.x = game.touch.x;
+      sh.y = game.touch.y - CONFIG.TOUCH_Y_OFFSET;   // nave acima do dedo
+    } else {
+      if (keys["arrowleft"] || keys["a"]) { sh.x -= CONFIG.SHIP_SPEED * f; }
+      if (keys["arrowright"] || keys["d"]) { sh.x += CONFIG.SHIP_SPEED * f; }
+      if (keys["arrowup"] || keys["w"]) { sh.y -= CONFIG.SHIP_SPEED * f; }
+      if (keys["arrowdown"] || keys["s"]) { sh.y += CONFIG.SHIP_SPEED * f; }
+    }
     sh.x = Math.max(sh.w / 2, Math.min(W - sh.w / 2, sh.x));
     sh.y = Math.max(yTop, Math.min(yBot, sh.y));
 
-    // tiro
+    // tiro: tecla ESPAÇO (desktop) ou enquanto toca a tela (mobile, automático)
     game.shootCooldown -= dt;
-    if (keys[" "] && game.shootCooldown <= 0) { fire(); }
+    if ((keys[" "] || game.touch.active) && game.shootCooldown <= 0) { fire(); }
 
     // bullets movem
     for (i = 0; i < game.bullets.length; i++) {
@@ -1179,6 +1233,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ---- Init -----------------------------------------------------------
   bindKeys();
+  bindTouch();
   game.stars = makeStars();
   dom.best.textContent = game.best;
   dom.ovScore.style.display = "none";

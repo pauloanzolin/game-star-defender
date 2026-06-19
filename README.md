@@ -1,12 +1,15 @@
 # ★ Star Defender
 
-[![version](https://img.shields.io/badge/version-1.3.1-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.4.0-blue)](CHANGELOG.md)
 
 Micro jogo arcade (scroller infinito) em HTML5 Canvas, com **ranking global em
 tempo real**. Empacotado em Docker (nginx + API Node).
 
 > **v1.2** — ranking GLOBAL ao vivo: a lista de recordes é compartilhada entre
 > todos os jogadores e atualiza em tempo real (Server-Sent Events).
+>
+> **v1.4** — joga no **PC e no celular**: layout responsivo e controle por toque
+> (arraste para mover; tiro automático).
 
 ## Arquitetura
 
@@ -96,6 +99,7 @@ Projeto segue **SemVer** e **Conventional Commits**; releases marcadas com **tag
 | v1.2.1 | Publicação nas portas 3550 (web) / 3551 (API) |
 | v1.3.0 | Armamento progressivo (4 upgrades) + item de vida (+2) |
 | v1.3.1 | Obstáculos viram cometas (apenas visual) |
+| v1.4.0 | Suporte mobile: responsivo + controles de toque |
 
 ### Publicar a v1.1 no GitHub
 

@@ -4,6 +4,16 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] - 2026-06-19
+
+### Adicionado
+- **Suporte mobile**: layout responsivo — o canvas escala para caber na largura
+  e na altura do dispositivo (mantendo a proporção 420x560).
+- **Controles de toque**: arraste o dedo para mover a nave (que fica logo acima
+  do toque) e o **tiro é automático** enquanto se toca a tela.
+- `touch-action: none` e viewport sem zoom para uma jogabilidade fluida no
+  celular; overlay rolável e ajustes para telas baixas.
+
 ## [1.3.1] - 2026-06-19
 
 ### Alterado
@@ -74,6 +84,7 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.4.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.4.0
 [1.3.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.1
 [1.3.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.0
 [1.2.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.1
