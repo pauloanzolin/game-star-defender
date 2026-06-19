@@ -49,7 +49,7 @@ star-defender/
 docker compose up -d --build
 ```
 
-Acesse: **http://localhost:8080**
+Acesse: **http://localhost:3550** (API direta em http://localhost:3551)
 
 Parar / remover:
 
@@ -68,7 +68,7 @@ docker compose down
 docker build -t star-defender:latest .
 
 # rodar o container
-docker run -d --name star-defender -p 8080:80 star-defender:latest
+docker run -d --name star-defender -p 3550:80 star-defender:latest
 ```
 
 Parar / remover:
@@ -81,7 +81,7 @@ docker rm -f star-defender
 
 - Imagem final fica em torno de ~50 MB (base `nginx:1.27-alpine`).
 - O HTML não é cacheado (sempre pega a versão mais recente do jogo).
-- Para trocar a porta, ajuste `8080:80` no `docker-compose.yml` ou o `-p` no `docker run`.
+- Portas: **web em 3550**, **API em 3551** (ajuste em `docker-compose.yml`).
 - `HEALTHCHECK` configurado: `docker ps` mostra o status `healthy`.
 
 ## Versionamento & publicação (DevOps)

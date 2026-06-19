@@ -238,7 +238,7 @@ document.addEventListener("DOMContentLoaded", function () {
     NAME_KEY: "stardefender_name",
     // Ranking GLOBAL em tempo real: mesma origem quando servido por nginx;
     // via file:// aponta para a stack local (CORS liberado no servidor).
-    API_BASE: (location.protocol === "file:" ? "http://localhost:8080/api" : "/api")
+    API_BASE: (location.protocol === "file:" ? "http://localhost:3550/api" : "/api")
   };
 
   var STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };

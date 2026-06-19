@@ -4,6 +4,12 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.1] - 2026-06-19
+
+### Alterado
+- Stack passa a publicar nas portas **3550** (web) e **3551** (API), conforme
+  o ambiente de implantação.
+
 ## [1.2.0] - 2026-06-19
 
 ### Adicionado
@@ -48,6 +54,7 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.2.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.1
 [1.2.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.0
 [1.1.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.1.0
 [1.0.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.0.0
