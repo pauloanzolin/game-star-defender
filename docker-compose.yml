@@ -4,10 +4,10 @@ services:
     image: star-defender:latest
     container_name: star-defender
     ports:
-      - "3550:80"          # acesse em http://star-defender:3550
+      - "8080:80"          # acesse em http://localhost:8080
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://star-defender/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3
