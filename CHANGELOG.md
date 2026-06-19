@@ -4,6 +4,14 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.1] - 2026-06-19
+
+### Adicionado
+- **Botão de pausa** na tela (sobre o canvas) — toque no celular ou clique no PC;
+  alterna entre ⏸ e ▶.
+- **Aviso de orientação**: em paisagem (telas baixas) aparece "gire o celular
+  para a vertical" e o jogo **pausa automaticamente**.
+
 ## [1.4.0] - 2026-06-19
 
 ### Adicionado
@@ -84,6 +92,7 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.4.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.4.1
 [1.4.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.4.0
 [1.3.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.1
 [1.3.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.0

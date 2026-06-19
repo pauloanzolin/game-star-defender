@@ -137,6 +137,43 @@
   }
   button:hover { background: #2a5aaa; box-shadow: 0 0 14px #4af; }
   .hint { margin-top: 16px; font-size: 11px; color: #557; letter-spacing: 1px; }
+  /* Botão de pausa sobre o canvas (toque no mobile / clique no PC) */
+  #pauseBtn {
+    position: absolute;
+    top: 6px; right: 8px;
+    width: 36px; height: 36px;
+    padding: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    letter-spacing: 0;
+    background: #1a3a6acc;
+    border: 1px solid #4af;
+    border-radius: 8px;
+    color: #cfe;
+    z-index: 5;
+  }
+  /* Aviso para girar o celular (paisagem em telas baixas) */
+  #rotate {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: #05060f;
+    color: #6cf;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+  #rotate .ic { font-size: 52px; margin-bottom: 16px; animation: rot 1.6s ease-in-out infinite; }
+  @keyframes rot { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(90deg); } }
+  @media (orientation: landscape) and (max-height: 500px) {
+    #rotate { display: flex; }
+  }
   #errbar {
     display: none;
     max-width: 420px;
@@ -169,6 +206,7 @@
       <span>N&Iacute;VEL: <b id="level">1</b></span>
       <span>VIDAS: <b id="lives">3</b></span>
     </div>
+    <button id="pauseBtn" type="button" aria-label="Pausar">&#10073;&#10073;</button>
     <div id="overlay">
       <h2 id="ovTitle">STAR DEFENDER</h2>
       <p id="ovDesc">
@@ -199,8 +237,9 @@
       </div>
     </div>
   </div>
-  <div class="hint">v1.4.0 &middot; recorde: <b id="best">0</b> &middot; PC e celular</div>
+  <div class="hint">v1.4.1 &middot; recorde: <b id="best">0</b> &middot; PC e celular</div>
   <pre id="errbar"></pre>
+  <div id="rotate"><div class="ic">&#128241;</div>Gire o celular<br>para a vertical</div>
 
 <script>
 "use strict";
@@ -290,7 +329,8 @@ document.addEventListener("DOMContentLoaded", function () {
     ovScore: document.getElementById("ovScore"),
     playerName: document.getElementById("playerName"),
     boardList: document.getElementById("boardList"),
-    boardStatus: document.getElementById("boardStatus")
+    boardStatus: document.getElementById("boardStatus"),
+    pauseBtn: document.getElementById("pauseBtn")
   };
 
   // ---- Persistência segura -------------------------------------------
@@ -568,12 +608,26 @@ document.addEventListener("DOMContentLoaded", function () {
     game.lifeTimer = CONFIG.LIFE_SPAWN_MS;       // 1º item de vida em 2 min
     game.state = STATE.PLAYING;
     updateHUD();
+    updatePauseBtn();
     dom.overlay.classList.add("hidden");
+  }
+
+  // Botão de pausa: visível só jogando/pausado; alterna o ícone ⏸ / ▶
+  function updatePauseBtn() {
+    var b = dom.pauseBtn;
+    if (!b) { return; }
+    if (game.state === STATE.PLAYING || game.state === STATE.PAUSED) {
+      b.style.display = "flex";
+      b.innerHTML = (game.state === STATE.PAUSED) ? "&#9654;" : "&#10073;&#10073;";
+    } else {
+      b.style.display = "none";
+    }
   }
 
   function togglePause() {
     if (game.state === STATE.PLAYING) { game.state = STATE.PAUSED; }
     else if (game.state === STATE.PAUSED) { game.state = STATE.PLAYING; }
+    updatePauseBtn();
   }
 
   function rankHtml(pos) {
@@ -592,6 +646,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function gameOver() {
     game.state = STATE.GAMEOVER;
+    updatePauseBtn();
     var nome = dom.playerName.value;
 
     dom.title.textContent = "FIM DE JOGO";
@@ -1234,6 +1289,20 @@ document.addEventListener("DOMContentLoaded", function () {
   // ---- Init -----------------------------------------------------------
   bindKeys();
   bindTouch();
+  // botão de pausa (toque/clique)
+  dom.pauseBtn.addEventListener("click", function () { togglePause(); });
+  // auto-pausa ao virar para paisagem em telas baixas (aviso "gire o celular")
+  var landscapeQ = window.matchMedia("(orientation: landscape) and (max-height: 500px)");
+  function onOrient() {
+    if (landscapeQ.matches && game.state === STATE.PLAYING) {
+      game.state = STATE.PAUSED;
+      updatePauseBtn();
+    }
+  }
+  if (landscapeQ.addEventListener) { landscapeQ.addEventListener("change", onOrient); }
+  else if (landscapeQ.addListener) { landscapeQ.addListener(onOrient); }
+  window.addEventListener("orientationchange", onOrient);
+
   game.stars = makeStars();
   dom.best.textContent = game.best;
   dom.ovScore.style.display = "none";
