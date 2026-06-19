@@ -162,7 +162,9 @@
         Power-ups (30s):
         <span class="pw" style="color:#4df">&#9679;</span>Escudo
         <span class="pw" style="color:#fc4">&#9679;</span>For&ccedil;a
-        <span class="pw" style="color:#6f6">&#9679;</span>Triplo
+        <span class="pw" style="color:#6f6">&#9679;</span>Triplo<br>
+        <span class="pw" style="color:#ffa030">&#8679;</span> Upgrade de arma (progressivo, at&eacute; Lv.4) &middot;
+        <span class="pw" style="color:#ff5a7a">&hearts;</span> Vida (+2, a cada 2 min)
       </p>
       <div id="ovScore"></div>
       <div id="nameRow">
@@ -227,6 +229,10 @@ document.addEventListener("DOMContentLoaded", function () {
     POWERUP_DURATION: 30000,    // 30s de buff
     POWERUP_SPAWN_MS: 9000,
     POWERUP_FALL: 2,
+    WEAPON_MAX: 4,              // 4 upgrades progressivos de armamento
+    WEAPON_SPAWN_MS: 16000,    // base p/ surgir upgrade de arma (encurta c/ dificuldade)
+    LIFE_SPAWN_MS: 120000,     // item de vida a cada 2 min
+    LIFE_BONUS: 2,             // cada item de vida dá +2 vidas
     SEC_PER_LEVEL: 15000,       // sobe de nível a cada 15s
     SCROLL_BASE: 2.4,           // velocidade contínua do cenário (cresce c/ dificuldade)
     HITS_TO_EXPLODE: 2,         // 2 batidas -> explode e perde 1 vida
@@ -242,7 +248,8 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 
   var STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
-  var PW = { SHIELD: "shield", POWER: "power", TRIPLE: "triple" };
+  var PW = { SHIELD: "shield", POWER: "power", TRIPLE: "triple",
+             WEAPON: "weapon", LIFE: "life" };
 
   // ---- DOM ------------------------------------------------------------
   var cv = document.getElementById("game");
@@ -427,11 +434,14 @@ document.addEventListener("DOMContentLoaded", function () {
     elapsed: 0,                // ms de jogo (para dificuldade por tempo)
     level: 1,
     diff: 0,
+    weaponLevel: 0,            // nível de armamento progressivo (0..WEAPON_MAX)
     spawnTimer: 0,
     shootCooldown: 0,
     powerupTimer: 0,
     obstacleTimer: 0,
-    meteorTimer: 0
+    meteorTimer: 0,
+    weaponTimer: 0,
+    lifeTimer: 0
   };
 
   dom.best.textContent = game.best;
@@ -499,11 +509,14 @@ document.addEventListener("DOMContentLoaded", function () {
     game.elapsed = 0;
     game.level = 1;
     game.diff = 0;
+    game.weaponLevel = 0;
     game.spawnTimer = 0;
     game.shootCooldown = 0;
     game.powerupTimer = CONFIG.POWERUP_SPAWN_MS;
     game.obstacleTimer = 3000;   // primeiro tijolo após ~3s
     game.meteorTimer = 5000;     // primeiro meteoro após ~5s
+    game.weaponTimer = CONFIG.WEAPON_SPAWN_MS;   // primeiro upgrade de arma
+    game.lifeTimer = CONFIG.LIFE_SPAWN_MS;       // 1º item de vida em 2 min
     game.state = STATE.PLAYING;
     updateHUD();
     dom.overlay.classList.add("hidden");
@@ -576,10 +589,12 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function spawnPowerup() {
-    var types = [PW.SHIELD, PW.POWER, PW.TRIPLE];
-    var t = types[Math.floor(rand(0, types.length))];
-    game.powerups.push({ x: rand(30, W - 30), y: -16, r: 12, type: t, dead: false });
+  function spawnPowerup(type) {
+    if (!type) {
+      var types = [PW.SHIELD, PW.POWER, PW.TRIPLE];
+      type = types[Math.floor(rand(0, types.length))];
+    }
+    game.powerups.push({ x: rand(30, W - 30), y: -16, r: 12, type: type, dead: false });
   }
 
   // Meteoros: indestrutíveis (balas não os afetam), só dá pra desviar.
@@ -600,12 +615,18 @@ document.addEventListener("DOMContentLoaded", function () {
   function buffColor(type) {
     if (type === PW.SHIELD) { return "#4df"; }
     if (type === PW.POWER) { return "#fc4"; }
-    return "#6f6"; // triple
+    if (type === PW.TRIPLE) { return "#6f6"; }
+    if (type === PW.WEAPON) { return "#ffa030"; }   // upgrade de arma
+    if (type === PW.LIFE) { return "#ff5a7a"; }     // vida (+2)
+    return "#fff";
   }
   function buffSymbol(type) {
     if (type === PW.SHIELD) { return "⛨"; } // escudo
     if (type === PW.POWER) { return "⚡"; }  // raio
-    return "≡";                              // três linhas
+    if (type === PW.TRIPLE) { return "≡"; }  // três linhas
+    if (type === PW.WEAPON) { return "⇧"; }  // upgrade de arma
+    if (type === PW.LIFE) { return "♥"; }    // vida
+    return "?";
   }
 
   function boom(x, y, hue, n) {
@@ -616,19 +637,32 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  // Disparo combina o ARMAMENTO PROGRESSIVO (game.weaponLevel) com os buffs
+  // temporários (power/triple). Quanto maior o nível, mais tiros e mais cadência.
   function fire() {
     var power = (game.buffs[PW.POWER] || 0) > 0;
-    var triple = (game.buffs[PW.TRIPLE] || 0) > 0;
+    var tripleBuff = (game.buffs[PW.TRIPLE] || 0) > 0;
+    var lvl = game.weaponLevel;
     var sh = game.ship;
-    function shoot(vx) {
+    var pierce = power || lvl >= 4;     // nível máx. perfura
+    var big = power || lvl >= 4;
+    function shoot(vx, dx) {
       game.bullets.push({
-        x: sh.x, y: sh.y - 14, vx: vx, vy: -CONFIG.BULLET_SPEED,
-        pierce: power, big: power, dead: false
+        x: sh.x + (dx || 0), y: sh.y - 14, vx: vx, vy: -CONFIG.BULLET_SPEED,
+        pierce: pierce, big: big, dead: false
       });
     }
-    if (triple) { shoot(-2.6); shoot(0); shoot(2.6); }
-    else { shoot(0); }
-    game.shootCooldown = power ? CONFIG.SHOOT_COOLDOWN * 0.6 : CONFIG.SHOOT_COOLDOWN;
+    if (tripleBuff || lvl >= 3) {            // Lv3+ ou buff triplo -> leque de 3
+      shoot(-2.6, 0); shoot(0, 0); shoot(2.6, 0);
+    } else if (lvl === 2) {                   // Lv2 -> tiro duplo paralelo
+      shoot(0, -7); shoot(0, 7);
+    } else {                                  // Lv0/1 -> tiro único
+      shoot(0, 0);
+    }
+    // cadência: melhora 12% por nível; power garante teto baixo
+    var cd = CONFIG.SHOOT_COOLDOWN * (1 - lvl * 0.12);
+    if (power) { cd = Math.min(cd, CONFIG.SHOOT_COOLDOWN * 0.55); }
+    game.shootCooldown = cd;
   }
 
   // Sistema de dano: cada batida conta; ao atingir HITS_TO_EXPLODE, explode e -1 vida.
@@ -718,11 +752,26 @@ document.addEventListener("DOMContentLoaded", function () {
       game.spawnTimer = Math.max(CONFIG.MIN_SPAWN_MS, CONFIG.BASE_SPAWN_MS - game.diff * 110);
     }
 
-    // spawn power-ups
+    // spawn power-ups (buffs temporários: escudo / força / triplo)
     game.powerupTimer -= dt;
     if (game.powerupTimer <= 0) {
       spawnPowerup();
       game.powerupTimer = CONFIG.POWERUP_SPAWN_MS;
+    }
+
+    // spawn de UPGRADE DE ARMA progressivo: surge enquanto a arma não está no
+    // máximo; fica mais frequente à medida que o jogo acelera ("sobe de nível").
+    game.weaponTimer -= dt;
+    if (game.weaponTimer <= 0) {
+      if (game.weaponLevel < CONFIG.WEAPON_MAX) { spawnPowerup(PW.WEAPON); }
+      game.weaponTimer = Math.max(7000, CONFIG.WEAPON_SPAWN_MS - game.diff * 700);
+    }
+
+    // spawn de item de VIDA a cada 2 min (+2 vidas)
+    game.lifeTimer -= dt;
+    if (game.lifeTimer <= 0) {
+      spawnPowerup(PW.LIFE);
+      game.lifeTimer = CONFIG.LIFE_SPAWN_MS;
     }
 
     // spawn de obstáculos: corrente contínua, mais frequente com a dificuldade
@@ -824,8 +873,21 @@ document.addEventListener("DOMContentLoaded", function () {
       var px = pu.x - game.ship.x, py = pu.y - game.ship.y;
       if (Math.abs(px) < pu.r + game.ship.w / 2 && Math.abs(py) < pu.r + game.ship.h / 2) {
         pu.dead = true;
-        game.buffs[pu.type] = CONFIG.POWERUP_DURATION; // renova para 30s
-        boom(pu.x, pu.y, pu.type === PW.SHIELD ? 200 : (pu.type === PW.POWER ? 45 : 130), 16);
+        if (pu.type === PW.WEAPON) {
+          // upgrade PROGRESSIVO de armamento (permanente na partida)
+          game.weaponLevel = Math.min(CONFIG.WEAPON_MAX, game.weaponLevel + 1);
+          boom(pu.x, pu.y, 35, 22);
+          updateHUD();
+        } else if (pu.type === PW.LIFE) {
+          // item de vida: +2 vidas
+          game.lives += CONFIG.LIFE_BONUS;
+          boom(pu.x, pu.y, 340, 22);
+          updateHUD();
+        } else {
+          // buffs temporários (escudo / força / triplo): renova para 30s
+          game.buffs[pu.type] = CONFIG.POWERUP_DURATION;
+          boom(pu.x, pu.y, pu.type === PW.SHIELD ? 200 : (pu.type === PW.POWER ? 45 : 130), 16);
+        }
       }
     }
 
@@ -989,17 +1051,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function drawBuffTimers() {
-    var order = [PW.SHIELD, PW.POWER, PW.TRIPLE];
     var by = 34;
     ctx.save();
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
     ctx.font = "bold 13px Courier New";
+    ctx.shadowColor = "#000"; ctx.shadowBlur = 4;
+
+    // nível de armamento progressivo (sempre visível durante o jogo)
+    ctx.fillStyle = game.weaponLevel >= CONFIG.WEAPON_MAX ? "#ff7" : "#ffa030";
+    var arma = (game.weaponLevel >= CONFIG.WEAPON_MAX)
+      ? "⇧ ARMA MAX"
+      : "⇧ ARMA Lv." + game.weaponLevel;
+    ctx.fillText(arma, 14, by);
+    by += 17;
+
+    // tempos restantes dos buffs temporários
+    var order = [PW.SHIELD, PW.POWER, PW.TRIPLE];
     for (var i = 0; i < order.length; i++) {
       var t = order[i], ms = game.buffs[t] || 0;
       if (ms <= 0) { continue; }
       ctx.fillStyle = buffColor(t);
-      ctx.shadowColor = "#000"; ctx.shadowBlur = 4;
       ctx.fillText(buffSymbol(t) + " " + Math.ceil(ms / 1000) + "s", 14, by);
       by += 17;
     }

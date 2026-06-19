@@ -4,6 +4,19 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2026-06-19
+
+### Adicionado
+- **Armamento progressivo (4 upgrades)**: itens de upgrade que sobem o nível da
+  arma (Lv.1→4) — cadência maior, tiro duplo, leque triplo e, no máximo, tiros
+  perfurantes/maiores. Surgem com mais frequência conforme o jogo acelera.
+- **Item de vida** a cada 2 minutos, concedendo **+2 vidas**.
+- HUD mostra o nível atual da arma (`⇧ ARMA Lv.X` / `ARMA MAX`).
+
+### Alterado
+- `fire()` agora combina o nível de armamento progressivo com os buffs
+  temporários (força/triplo).
+
 ## [1.2.1] - 2026-06-19
 
 ### Alterado
@@ -54,6 +67,7 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Power-ups temporários (30s): escudo, força (tiro perfurante) e tiro triplo.
 - Empacotamento Docker (nginx) com docker-compose.
 
+[1.3.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.3.0
 [1.2.1]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.1
 [1.2.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.2.0
 [1.1.0]: https://github.com/pauloanzolin/game-star-defender/releases/tag/v1.1.0
